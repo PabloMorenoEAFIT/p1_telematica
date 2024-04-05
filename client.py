@@ -1,22 +1,25 @@
+#!/usr/bin/env python3
+
 import socket
 import time
+import sys
 
-# Lista para almacenar el caché de consultas
+# Lista para almacenar el cache
 cache = []
 
 def query_dns(server, domain, qtype='A'):
     # Crear un socket UDP
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     
-    # Establecer el tiempo de espera para recibir una respuesta (en segundos)
+    # tiempo de espera 
     client_socket.settimeout(5)
     
     try:
-        # Enviar la consulta al servidor DNS
+        # consulta al servidor DNS
         query = create_dns_query(domain, qtype)
         client_socket.sendto(query, (server, 53))
         
-        # Recibir la respuesta del servidor
+        # Recibir la respuesta 
         response, _ = client_socket.recvfrom(1024)
         
         # Analizar y mostrar la respuesta
@@ -27,7 +30,7 @@ def query_dns(server, domain, qtype='A'):
         update_cache(log_message)
         
         # Registrar la petición en un archivo de registro
-        log_request(log_message)
+        log_request(log_message, log_file_path)
         
     except socket.timeout:
         print("Timeout: No se recibió ninguna respuesta del servidor DNS.")
@@ -54,7 +57,7 @@ def create_dns_query(domain, qtype='A'):
     return header + question + qtype_code + qclass
 
 def get_qtype_code(qtype):
-    # Devolver el código de tipo de consulta según el tipo especificado
+    # Devolver el tipo de consulta 
     if qtype.upper() == 'A':
         return b'\x00\x01'
     elif qtype.upper() == 'NS':
@@ -71,12 +74,13 @@ def get_qtype_code(qtype):
 def parse_dns_response(response, domain, qtype):
     # Analizar la respuesta DNS
     # Aquí puedes implementar la lógica para analizar el formato de respuesta DNS
-    # Este es un ejemplo básico que simplemente devuelve la respuesta sin procesar
+    
+    # Continuar
     return f"{time.strftime('%Y-%m-%d %H:%M:%S')} <clientIP> {domain} {qtype} <responseIP>"
 
-def log_request(message):
+def log_request(message, log_file_path):
     # Guardar el mensaje en un archivo de registro
-    with open("dns_log.txt", "a") as logfile:
+    with open(log_file_path, "a") as logfile:
         logfile.write(message + "\n")
 
 def update_cache(message):
@@ -90,7 +94,14 @@ def flush_cache():
     cache.clear()
     print("El caché ha sido borrado.")
 
-# Ejemplo de uso
+# Comprobar si se proporcionó la ruta del archivo de registro como argumento de la línea de comandos
+if len(sys.argv) != 2:
+    print("Uso: ./dnsclient <ruta_archivo_log>")
+    sys.exit(1)
+
+log_file_path = sys.argv[1]
+
+
 if __name__ == "__main__":
     while True:
         user_input = input("Ingrese la información en el formato 'SERVER <ip address> TYPE <recurso de registro> DOMAIN <midominio.com>', o 'flush' para borrar el caché: ")
@@ -111,4 +122,6 @@ if __name__ == "__main__":
         try:
             query_dns(server, domain, qtype)
         except ValueError as e:
-            print(e)
+            print("Error:", e)
+        except Exception as e:
+            print("Se produjo un error inesperado:", e)
