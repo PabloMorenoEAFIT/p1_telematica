@@ -25,28 +25,47 @@ void load_dns_records(const char *filename) {
         exit(EXIT_FAILURE);
     }
 
-    while (fscanf(file, "%s %s %s", dns_records[num_records].name, dns_records[num_records].type, dns_records[num_records].value) == 3) {
-        num_records++;
+    char line[MAX_DOMAIN_NAME_LENGTH + MAX_IP_ADDRESS_LENGTH + 2]; // +2 for ':' and '\n'
+
+    while (fgets(line, sizeof(line), file) != NULL && num_records < MAX_RECORDS) {
+        // Elimina el salto de línea del final de la línea
+        line[strcspn(line, "\n")] = '\0';
+
+        // Divide la línea en nombre de dominio y dirección IP
+        char *domain = strtok(line, ":");
+        char *ip = strtok(NULL, ":");
+
+        if (domain != NULL && ip != NULL) {
+            // Guarda el registro DNS en la estructura dns_records
+            strncpy(dns_records[num_records].name, domain, MAX_DOMAIN_NAME_LENGTH);
+            strncpy(dns_records[num_records].value, ip, MAX_IP_ADDRESS_LENGTH);
+
+            num_records++;
+        }
     }
 
     fclose(file);
 }
 
-void handle_dns_request(SOCKET sockfd) {
+void handle_dns_request(SOCKET sockfd, const char *query) {
     struct sockaddr_in client_addr;
     int client_len = sizeof(client_addr);
     char buffer[MAX_DOMAIN_NAME_LENGTH];
-    int recv_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_len);
-    if (recv_len == -1) {
-        perror("Error al recibir datos");
-        exit(EXIT_FAILURE);
-    }
 
     // Procesar la solicitud DNS y buscar la respuesta en los registros cargados
-    // Aquí debes implementar la lógica para buscar la respuesta en los registros cargados
+    const char *response = NULL;
+    for (int i = 0; i < num_records; ++i) {
+        if (strcmp(query, dns_records[i].name) == 0) {
+            // Se encontró una coincidencia, asignar la respuesta
+            response = dns_records[i].value;
+            break;
+        }
+    }
 
-    // Dummy response
-    const char *response = "Respuesta DNS dummy";
+    // Si no se encontró una respuesta, enviar una respuesta predeterminada
+    if (!response) {
+        response = "No se encontró la dirección IP para el nombre de dominio especificado";
+    }
 
     // Enviar la respuesta al cliente
     if (sendto(sockfd, response, strlen(response), 0, (struct sockaddr *)&client_addr, client_len) == -1) {
@@ -96,6 +115,10 @@ int main(int argc, char *argv[]) {
     }
 
     // Esperar y manejar las solicitudes DNS entrantes
+    struct sockaddr_in client_addr;
+    int client_len = sizeof(client_addr);
+    char buffer[MAX_DOMAIN_NAME_LENGTH];
+
     while (1) {
         fd_set tmp_fds;
         FD_ZERO(&tmp_fds);
@@ -109,7 +132,13 @@ int main(int argc, char *argv[]) {
         }
 
         if (FD_ISSET(sockfd, &tmp_fds)) {
-            handle_dns_request(sockfd);
+            int recv_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_len);
+            if (recv_len == -1) {
+                perror("Error al recibir datos");
+                exit(EXIT_FAILURE);
+            }
+            buffer[recv_len] = '\0';
+            handle_dns_request(sockfd, buffer);
         }
     }
 
@@ -121,3 +150,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+

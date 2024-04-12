@@ -1,11 +1,13 @@
-#!/usr/bin/env python3
-
 import socket
 import time
 import sys
 
-# Lista para almacenar el cache
-cache = []
+# Comprobar si se proporcionó la ruta del archivo de registro como argumento de la línea de comandos
+if len(sys.argv) != 2:
+    print("Uso: ./dnsclient <ruta_archivo_log>")
+    sys.exit(1)
+
+log_file_path = sys.argv[1]
 
 def query_dns(server, domain, qtype='A'):
     # Crear un socket UDP
@@ -15,7 +17,7 @@ def query_dns(server, domain, qtype='A'):
     client_socket.settimeout(5)
     
     try:
-        # consulta al servidor DNS
+        # Construir la consulta DNS
         query = create_dns_query(domain, qtype)
         client_socket.sendto(query, (server, 53))
         
@@ -25,9 +27,6 @@ def query_dns(server, domain, qtype='A'):
         # Analizar y mostrar la respuesta
         log_message = parse_dns_response(response, domain, qtype)
         print(log_message)
-        
-        # Registrar la petición en el caché
-        update_cache(log_message)
         
         # Registrar la petición en un archivo de registro
         log_request(log_message, log_file_path)
@@ -73,45 +72,21 @@ def get_qtype_code(qtype):
 
 def parse_dns_response(response, domain, qtype):
     # Analizar la respuesta DNS
-    # Aquí puedes implementar la lógica para analizar el formato de respuesta DNS
-    
-    # Continuar
-    return f"{time.strftime('%Y-%m-%d %H:%M:%S')} <clientIP> {domain} {qtype} <responseIP>"
+    # La respuesta DNS es un mensaje binario que debe interpretarse según el protocolo DNS
+    # Aquí, simplemente devolvemos el mensaje recibido como cadena de bytes hexadecimales
+    return f"{time.strftime('%Y-%m-%d %H:%M:%S')} <clientIP> {domain} {qtype} {response.hex()}"
 
 def log_request(message, log_file_path):
     # Guardar el mensaje en un archivo de registro
     with open(log_file_path, "a") as logfile:
         logfile.write(message + "\n")
 
-def update_cache(message):
-    # Actualizar el caché con la última consulta
-    if len(cache) >= 10:
-        cache.pop(0)  # Eliminar la consulta más antigua si el caché está lleno
-    cache.append(message)
-
-def flush_cache():
-    # Borrar el caché
-    cache.clear()
-    print("El caché ha sido borrado.")
-
-# Comprobar si se proporcionó la ruta del archivo de registro como argumento de la línea de comandos
-if len(sys.argv) != 2:
-    print("Uso: ./dnsclient <ruta_archivo_log>")
-    sys.exit(1)
-
-log_file_path = sys.argv[1]
-
-
 if __name__ == "__main__":
     while True:
-        user_input = input("Ingrese la información en el formato 'SERVER <ip address> TYPE <recurso de registro> DOMAIN <midominio.com>', o 'flush' para borrar el caché: ")
+        user_input = input("Ingrese la información en el formato 'SERVER <ip address> TYPE <recurso de registro> DOMAIN <midominio.com>': ")
         parts = user_input.split()
         
-        if len(parts) == 1 and parts[0].lower() == 'flush':
-            flush_cache()
-            continue
-        
-        if len(parts) != 7 or parts[0].upper() != 'SERVER' or parts[2].upper() != 'TYPE' or parts[4].upper() != 'DOMAIN':
+        if len(parts) != 6 or parts[0].upper() != 'SERVER' or parts[2].upper() != 'TYPE' or parts[4].upper() != 'DOMAIN':
             print("Formato incorrecto. Por favor, asegúrese de ingresar la información correctamente.")
             continue
         
