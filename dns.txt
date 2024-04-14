@@ -1,3 +1,3 @@
-"ejemplo.com:8.8.8.8",
-"avianca.com:92.122.157.120",
+"ejemplo.com:8.8.8.8"
+"avianca.com:172.217.14.192"
 "facebook.com:104.244.42.65"

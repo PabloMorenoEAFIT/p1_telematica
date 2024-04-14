@@ -1,10 +1,12 @@
 import socket
 import time
 import sys
+import requests
+import webbrowser
 
 # Comprobar si se proporcionó la ruta del archivo de registro como argumento de la línea de comandos
 if len(sys.argv) != 2:
-    print("Uso: ./dnsclient <ruta_archivo_log>")
+    print("Uso: ./client.py </path/log.log>")
     sys.exit(1)
 
 log_file_path = sys.argv[1]
@@ -24,10 +26,17 @@ def query_dns(server, domain, qtype='A'):
         # Recibir la respuesta 
         response, _ = client_socket.recvfrom(1024)
         
+        # Obtener la dirección IP de la máquina cliente
+        client_ip = socket.gethostbyname(socket.gethostname())
+        
         # Analizar y mostrar la respuesta
-        log_message = parse_dns_response(response, domain, qtype)
+        log_message = parse_dns_response(response, domain, qtype, client_ip)
         print(log_message)
         
+        partes = log_message.split()
+        http_ip = partes[-1]
+        acceder_ip(http_ip)
+
         # Registrar la petición en un archivo de registro
         log_request(log_message, log_file_path)
         
@@ -70,11 +79,38 @@ def get_qtype_code(qtype):
     else:
         raise ValueError("Tipo de registro no válido. Los tipos válidos son: A, NS, CNAME, SOA, MX.")
 
-def parse_dns_response(response, domain, qtype):
+def parse_dns_response(response, domain, qtype, client_ip):
     # Analizar la respuesta DNS
     # La respuesta DNS es un mensaje binario que debe interpretarse según el protocolo DNS
-    # Aquí, simplemente devolvemos el mensaje recibido como cadena de bytes hexadecimales
-    return f"{time.strftime('%Y-%m-%d %H:%M:%S')} <clientIP> {domain} {qtype} {response.hex()}"
+    # Aquí, se analizará la respuesta y formateará como un archivo de zona DNS
+    lines = []
+    # Obtener la dirección IP de respuesta almacenada en dns.txt
+    response_ip = get_response_ip(domain)
+    # Obtener la fecha y hora actuales
+    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+    # Formatear la respuesta como se requiere
+    response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
+    
+    return response_message
+
+def get_response_ip(domain):
+    # Obtener la dirección IP de respuesta almacenada en dns.txt
+    with open("dns.txt") as f:
+        for line in f:
+            # Eliminar los caracteres especiales y dividir la línea en nombre de dominio y dirección IP
+            dns_entry = line.strip().strip('"').split(":")
+            if dns_entry[0] == domain:
+                return dns_entry[1]  # Devolver la dirección IP sin modificar
+
+    return "Dirección IP no encontrada"
+
+def acceder_ip(response_ip):
+    try:
+        # Abrir el navegador web y acceder a la URL correspondiente a la dirección IP
+        webbrowser.open(f"http://{response_ip}")
+        return f"Se abrió el navegador y se accedió a la página web asociada a la dirección IP {response_ip}"
+    except Exception as e:
+        return f"Error al intentar abrir el navegador y acceder a la página web: {str(e)}"
 
 def log_request(message, log_file_path):
     # Guardar el mensaje en un archivo de registro

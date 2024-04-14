@@ -25,7 +25,7 @@ void load_dns_records(const char *filename) {
         exit(EXIT_FAILURE);
     }
 
-    char line[MAX_DOMAIN_NAME_LENGTH + MAX_IP_ADDRESS_LENGTH + 2]; // +2 for ':' and '\n'
+    char line[MAX_DOMAIN_NAME_LENGTH + MAX_IP_ADDRESS_LENGTH + 3]; // +3 for ':' and '\n'
 
     while (fgets(line, sizeof(line), file) != NULL && num_records < MAX_RECORDS) {
         // Elimina el salto de línea del final de la línea
@@ -47,9 +47,7 @@ void load_dns_records(const char *filename) {
     fclose(file);
 }
 
-void handle_dns_request(SOCKET sockfd, const char *query) {
-    struct sockaddr_in client_addr;
-    int client_len = sizeof(client_addr);
+void handle_dns_request(SOCKET sockfd, const char *query, const struct sockaddr_in *client_addr, int client_len) {
     char buffer[MAX_DOMAIN_NAME_LENGTH];
 
     // Procesar la solicitud DNS y buscar la respuesta en los registros cargados
@@ -68,7 +66,7 @@ void handle_dns_request(SOCKET sockfd, const char *query) {
     }
 
     // Enviar la respuesta al cliente
-    if (sendto(sockfd, response, strlen(response), 0, (struct sockaddr *)&client_addr, client_len) == -1) {
+    if (sendto(sockfd, response, strlen(response), 0, (struct sockaddr *)client_addr, client_len) == -1) {
         perror("Error al enviar respuesta");
         exit(EXIT_FAILURE);
     }
@@ -120,26 +118,13 @@ int main(int argc, char *argv[]) {
     char buffer[MAX_DOMAIN_NAME_LENGTH];
 
     while (1) {
-        fd_set tmp_fds;
-        FD_ZERO(&tmp_fds);
-        FD_SET(sockfd, &tmp_fds);
-        int num_ready_fds = select(0, &tmp_fds, NULL, NULL, NULL);
-        if (num_ready_fds == SOCKET_ERROR) {
-            perror("Error en select");
-            closesocket(sockfd);
-            WSACleanup();
+        int recv_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_len);
+        if (recv_len == -1) {
+            perror("Error al recibir datos");
             exit(EXIT_FAILURE);
         }
-
-        if (FD_ISSET(sockfd, &tmp_fds)) {
-            int recv_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_len);
-            if (recv_len == -1) {
-                perror("Error al recibir datos");
-                exit(EXIT_FAILURE);
-            }
-            buffer[recv_len] = '\0';
-            handle_dns_request(sockfd, buffer);
-        }
+        buffer[recv_len] = '\0';
+        handle_dns_request(sockfd, buffer, &client_addr, client_len);
     }
 
     // Cerrar el socket
@@ -150,4 +135,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
