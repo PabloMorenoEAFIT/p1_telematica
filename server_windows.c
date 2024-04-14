@@ -1,10 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
+#include <winsock2.h>
+
+#pragma comment(lib, "Ws2_32.lib")
 
 #define MAX_DOMAIN_NAME_LENGTH 256
 #define MAX_IP_ADDRESS_LENGTH 16
@@ -48,7 +47,7 @@ void load_dns_records(const char *filename) {
     fclose(file);
 }
 
-void handle_dns_request(int sockfd, const char *query, const struct sockaddr_in *client_addr, socklen_t client_len) {
+void handle_dns_request(SOCKET sockfd, const char *query, const struct sockaddr_in *client_addr, int client_len) {
     char buffer[MAX_DOMAIN_NAME_LENGTH];
 
     // Procesar la solicitud DNS y buscar la respuesta en los registros cargados
@@ -67,7 +66,7 @@ void handle_dns_request(int sockfd, const char *query, const struct sockaddr_in 
     }
 
     // Enviar la respuesta al cliente
-    if (sendto(sockfd, response, strlen(response), 0, (const struct sockaddr *)client_addr, client_len) == -1) {
+    if (sendto(sockfd, response, strlen(response), 0, (struct sockaddr *)client_addr, client_len) == -1) {
         perror("Error al enviar respuesta");
         exit(EXIT_FAILURE);
     }
@@ -82,10 +81,19 @@ int main(int argc, char *argv[]) {
     // Leer el archivo de configuracion
     load_dns_records(argv[3]);
 
+    // Inicializar Winsock
+    WSADATA wsa_data;
+    int result = WSAStartup(MAKEWORD(2, 2), &wsa_data);
+    if (result != 0) {
+        printf("Error al inicializar Winsock: %d\n", result);
+        return 1;
+    }
+
     // Crear el socket UDP
-    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sockfd == -1) {
+    SOCKET sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sockfd == INVALID_SOCKET) {
         perror("Error al crear el socket");
+        WSACleanup();
         exit(EXIT_FAILURE);
     }
 
@@ -97,15 +105,16 @@ int main(int argc, char *argv[]) {
     server_addr.sin_port = htons(atoi(argv[2]));
 
     // Vincular el socket a la dirección del servidor
-    if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+    if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
         perror("Error al vincular el socket");
-        close(sockfd);
+        closesocket(sockfd);
+        WSACleanup();
         exit(EXIT_FAILURE);
     }
 
     // Esperar y manejar las solicitudes DNS entrantes
     struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
+    int client_len = sizeof(client_addr);
     char buffer[MAX_DOMAIN_NAME_LENGTH];
 
     while (1) {
@@ -119,7 +128,10 @@ int main(int argc, char *argv[]) {
     }
 
     // Cerrar el socket
-    close(sockfd);
+    closesocket(sockfd);
+
+    // Cerrar Winsock
+    WSACleanup();
 
     return 0;
 }
