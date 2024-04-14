@@ -80,17 +80,26 @@ def get_qtype_code(qtype):
         raise ValueError("Tipo de registro no válido. Los tipos válidos son: A, NS, CNAME, SOA, MX.")
 
 def parse_dns_response(response, domain, qtype, client_ip):
-    # Analizar la respuesta DNS
-    # La respuesta DNS es un mensaje binario que debe interpretarse según el protocolo DNS
-    # Aquí, se analizará la respuesta y formateará como un archivo de zona DNS
-    lines = []
+    # Analizar la respuesta DNS y formatear el registro en el archivo de registro
+    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+
     # Obtener la dirección IP de respuesta almacenada en dns.txt
     response_ip = get_response_ip(domain)
-    # Obtener la fecha y hora actuales
-    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-    # Formatear la respuesta como se requiere
-    response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
-    
+
+    # Formatear el registro en el archivo de registro según el tipo de registro
+    if qtype.upper() == 'A':
+        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
+    elif qtype.upper() == 'NS':
+        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
+    elif qtype.upper() == 'CNAME':
+        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
+    elif qtype.upper() == 'SOA':
+        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
+    elif qtype.upper() == 'MX':
+        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
+    else:
+        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip} Tipo de registro no válido"
+
     return response_message
 
 def get_response_ip(domain):
