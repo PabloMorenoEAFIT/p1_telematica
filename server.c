@@ -4,7 +4,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <unistd.h>
 
 #define MAX_DOMAIN_NAME_LENGTH 256
 #define MAX_IP_ADDRESS_LENGTH 16
@@ -51,6 +50,9 @@ void load_dns_records(const char *filename) {
 void handle_dns_request(int sockfd, const char *query, const struct sockaddr_in *client_addr, socklen_t client_len) {
     char buffer[MAX_DOMAIN_NAME_LENGTH];
 
+    // Mostrar mensaje cuando se recibe una solicitud DNS
+    printf("Solicitud DNS recibida de %s\n", inet_ntoa(client_addr->sin_addr));
+
     // Procesar la solicitud DNS y buscar la respuesta en los registros cargados
     const char *response = NULL;
     for (int i = 0; i < num_records; ++i) {
@@ -67,7 +69,7 @@ void handle_dns_request(int sockfd, const char *query, const struct sockaddr_in 
     }
 
     // Enviar la respuesta al cliente
-    if (sendto(sockfd, response, strlen(response), 0, (const struct sockaddr *)client_addr, client_len) == -1) {
+    if (sendto(sockfd, response, strlen(response), 0, (struct sockaddr *)client_addr, client_len) == -1) {
         perror("Error al enviar respuesta");
         exit(EXIT_FAILURE);
     }
@@ -84,7 +86,7 @@ int main(int argc, char *argv[]) {
 
     // Crear el socket UDP
     int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sockfd == -1) {
+    if (sockfd < 0) {
         perror("Error al crear el socket");
         exit(EXIT_FAILURE);
     }
