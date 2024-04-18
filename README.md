@@ -39,9 +39,12 @@ Se hace especial enfásis en el cómo ambas aplicaciones se comunican entre sí 
 
 - **gcc -o dnserver server.c -lws2_32**
   :Es necesario correr el siguiente comando para vincular las librerias nativas de C con el programa para su normal ejecución a la par que para crear el archivo ejecutable del servidor
-- **dnserver.exe <-ipconfig> 53 dns.txt log.txt** : para ejecutar el servidor
-- **python client.py log.txt** : **SERVER <-ipconfig> TYPE A DOMAIN <midominio.com>** : para ejecutar client.py
+- **dnserver.exe <-ipconfig> 53 ./dns.txt ./log.txt** : para ejecutar el servidor
+- **python client.py ./log.txt** : **SERVER <-ipconfig> TYPE A DOMAIN <midominio.com>** : para ejecutar client.py
 - **netstat -ano | findstr :53** : para revisar si el puerto 53 esta en uso
+- **Para acceder intstancia EC2**: ssh -i /path/to/your/key.pem ec2-user@<tu-direccion-ip>
+- para ejecutar server.c : **sudo ./dnserver <ip_privada> 53 ./dns.txt ./log.txt**
+
 
 ## Conclusiones 
 
