@@ -42,7 +42,7 @@ Se hace especial enfásis en el cómo ambas aplicaciones se comunican entre sí 
 - **dnserver.exe <-ipconfig> 53 ./dns.txt ./log.txt** : para ejecutar el servidor
 - **python client.py ./log.txt** : **SERVER <-ipconfig> TYPE A DOMAIN <midominio.com>** : para ejecutar client.py
 - **netstat -ano | findstr :53** : para revisar si el puerto 53 esta en uso
-- **Para acceder intstancia EC2**: ssh -i /path/to/your/key.pem ec2-user@<tu-direccion-ip>
+- **Para acceder intstancia EC2**: ssh -i /path/to/your/key.pem ec2-user@<ip_privada>
 - para ejecutar server.c : **sudo ./dnserver <ip_privada> 53 ./dns.txt ./log.txt**
 
 
