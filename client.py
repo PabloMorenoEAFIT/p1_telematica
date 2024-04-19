@@ -1,147 +1,87 @@
 import socket
-import time
+import subprocess
 import sys
-import requests
-import webbrowser
+import os
+from datetime import datetime
 
-# Comprobar si se proporcionó la ruta del archivo de registro como argumento de la línea de comandos
-if len(sys.argv) != 2:
-    print("Uso: ./client.py </path/log.log>")
-    sys.exit(1)
+BUFFER_SIZE = 256
+TIMEOUT = 10  # Tiempo límite en segundos
 
-log_file_path = sys.argv[1]
+def writeToLog(log_file, client_ip, query, response_ip):
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"{current_time} {client_ip} {query} {response_ip}"
+    with open(log_file, 'a') as f:
+        f.write(log_entry + '\n')
 
-def query_dns(server, domain, qtype='A'):
+def clearLogFile(log_file):
+    # Abre el archivo en modo escritura, borrando su contenido
+    with open(log_file, 'w'):
+        pass
+
+def dns_query(server_ip, server_port, query, log_file):
     # Crear un socket UDP
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    
-    # tiempo de espera 
-    client_socket.settimeout(5)
-    
-    try:
-        # Construir la consulta DNS
-        query = create_dns_query(domain, qtype)
-        client_socket.sendto(query, (server, 53))
-        
-        # Recibir la respuesta 
-        response, _ = client_socket.recvfrom(1024)
-        
-        # Obtener la dirección IP de la máquina cliente
-        client_ip = socket.gethostbyname(socket.gethostname())
-        
-        # Analizar y mostrar la respuesta
-        log_message = parse_dns_response(response, domain, qtype, client_ip)
-        print(log_message)
-        
-        partes = log_message.split()
-        http_ip = partes[-1]
-        acceder_ip(http_ip)
+    client_socket.settimeout(TIMEOUT)  # Configurar el tiempo de espera
 
-        # Registrar la petición en un archivo de registro
-        log_request(log_message, log_file_path)
-        
-    except socket.timeout:
-        print("Timeout: No se recibió ninguna respuesta del servidor DNS.")
-    finally:
+    try:
+        # Enviar la consulta DNS al servidor
+        client_socket.sendto(query.encode(), (server_ip, server_port))
+
+        # Recibir la respuesta del servidor DNS
+        response, server_address = client_socket.recvfrom(BUFFER_SIZE)
+        server_ip, server_port = server_address
+
+        # Mostrar la respuesta recibida
+        print("Respuesta recibida:", response.decode())
+
         # Cerrar el socket
         client_socket.close()
 
-def create_dns_query(domain, qtype='A'):
-    # Estructura básica de una consulta DNS
-    # Cabecera de 12 bytes
-    # Consulta de dominio
-    # Tipo de registro
-    # Clase (IN para Internet)
-    query_id = 1234  # ID de consulta arbitrario
-    header = b'\x00\x00' + b'\x01\x00' + b'\x00\x01' + b'\x00\x00' + b'\x00\x00' + b'\x00\x00'
-    question = b''
-    for part in domain.split('.'):
-        question += bytes([len(part)]) + part.encode()
-    question += b'\x00'  # Terminador de cadena
-    
-    qtype_code = get_qtype_code(qtype)  # Código de tipo de consulta
-    qclass = b'\x00\x01'  # Clase de consulta (IN)
-    
-    return header + question + qtype_code + qclass
+        # Verificar que la respuesta sea una dirección IP válida
+        ip_address = response.decode()
 
-def get_qtype_code(qtype):
-    # Devolver el tipo de consulta 
-    if qtype.upper() == 'A':
-        return b'\x00\x01'
-    elif qtype.upper() == 'NS':
-        return b'\x00\x02'
-    elif qtype.upper() == 'CNAME':
-        return b'\x00\x05'
-    elif qtype.upper() == 'SOA':
-        return b'\x00\x06'
-    elif qtype.upper() == 'MX':
-        return b'\x00\x0f'
-    else:
-        raise ValueError("Tipo de registro no válido. Los tipos válidos son: A, NS, CNAME, SOA, MX.")
+        # Si la respuesta es una dirección IP válida, realizar una búsqueda en el navegador
+        if ip_address.count('.') == 3:
+            if sys.platform.startswith('win'):
+                subprocess.run(["start", "http://" + ip_address], shell=True)
+            else:
+                subprocess.run(["xdg-open", "http://" + ip_address], check=True)
+        else:
+            print("La respuesta recibida no es una dirección IP válida.")
 
-def parse_dns_response(response, domain, qtype, client_ip):
-    # Analizar la respuesta DNS y formatear el registro en el archivo de registro
-    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+        # Escribir la consulta en el archivo de registro
+        writeToLog(log_file, server_ip, query, ip_address)
 
-    # Obtener la dirección IP de respuesta almacenada en dns.txt
-    response_ip = get_response_ip(domain)
-
-    # Formatear el registro en el archivo de registro según el tipo de registro
-    if qtype.upper() == 'A':
-        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
-    elif qtype.upper() == 'NS':
-        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
-    elif qtype.upper() == 'CNAME':
-        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
-    elif qtype.upper() == 'SOA':
-        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
-    elif qtype.upper() == 'MX':
-        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip}"
-    else:
-        response_message = f"{current_time} {client_ip} {domain} {qtype} {response_ip} Tipo de registro no válido"
-
-    return response_message
-
-def get_response_ip(domain):
-    # Obtener la dirección IP de respuesta almacenada en dns.txt
-    with open("dns.txt") as f:
-        for line in f:
-            # Eliminar los caracteres especiales y dividir la línea en nombre de dominio y dirección IP
-            dns_entry = line.strip().strip('"').split(":")
-            if dns_entry[0] == domain:
-                return dns_entry[1]  # Devolver la dirección IP sin modificar
-
-    return "Dirección IP no encontrada"
-
-def acceder_ip(response_ip):
-    try:
-        # Abrir el navegador web y acceder a la URL correspondiente a la dirección IP
-        webbrowser.open(f"http://{response_ip}")
-        return f"Se abrió el navegador y se accedió a la página web asociada a la dirección IP {response_ip}"
+    except socket.timeout:
+        print("La solicitud se ha cancelado porque la respuesta del servidor DNS tardó demasiado.")
     except Exception as e:
-        return f"Error al intentar abrir el navegador y acceder a la página web: {str(e)}"
+        print("Se produjo un error:", e)
 
-def log_request(message, log_file_path):
-    # Guardar el mensaje en un archivo de registro
-    with open(log_file_path, "a") as logfile:
-        logfile.write(message + "\n")
+def main():
+    if len(sys.argv) != 2:
+        print("Uso:", sys.argv[0], "<archivo_log>")
+        sys.exit(1)
+
+    log_file = sys.argv[1]
+
+    while True:
+        user_input = input("Ingrese la consulta (SERVER <ip address> TYPE <recurso de registro> DOMAIN <midominio.com>) o 'clear' para borrar el archivo de registro: ")
+
+        if user_input.strip().lower() == 'clear':
+            clearLogFile(log_file)
+            print(f"Contenido de {log_file} borrado.")
+        else:
+            parts = user_input.split()
+            if len(parts) != 6 or parts[0] != 'SERVER' or parts[2] != 'TYPE' or parts[4] != 'DOMAIN':
+                print("Formato de consulta incorrecto. Debe ser en el formato: SERVER <ip address> TYPE <recurso de registro> DOMAIN <midominio.com>")
+                continue
+
+            server_ip = parts[1]
+            query = parts[5]
+            server_port = 53  # Puerto por defecto para DNS
+
+            # Enviar la consulta DNS y recibir la respuesta
+            dns_query(server_ip, server_port, query, log_file)
 
 if __name__ == "__main__":
-    while True:
-        user_input = input("Ingrese la información en el formato 'SERVER <ip address> TYPE <recurso de registro> DOMAIN <midominio.com>': ")
-        parts = user_input.split()
-        
-        if len(parts) != 6 or parts[0].upper() != 'SERVER' or parts[2].upper() != 'TYPE' or parts[4].upper() != 'DOMAIN':
-            print("Formato incorrecto. Por favor, asegúrese de ingresar la información correctamente.")
-            continue
-        
-        server = parts[1]
-        qtype = parts[3]
-        domain = parts[5]
-        
-        try:
-            query_dns(server, domain, qtype)
-        except ValueError as e:
-            print("Error:", e)
-        except Exception as e:
-            print("Se produjo un error inesperado:", e)
+    main()
