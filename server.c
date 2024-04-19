@@ -5,123 +5,104 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define MAX_DOMAIN_NAME_LENGTH 256
-#define MAX_IP_ADDRESS_LENGTH 16
+#define MAX_BUFFER_SIZE 1024
 #define MAX_RECORDS 100
 
-struct dns_record {
-    char name[MAX_DOMAIN_NAME_LENGTH];
-    char type[5]; // A, NS, CNAME, SOA, MX, etc.
-    char value[MAX_IP_ADDRESS_LENGTH];
-};
-
-struct dns_record dns_records[MAX_RECORDS];
-int num_records = 0;
-
-void load_dns_records(const char *filename) {
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        perror("Error al abrir el archivo de configuracion");
-        exit(EXIT_FAILURE);
-    }
-
-    char line[MAX_DOMAIN_NAME_LENGTH + MAX_IP_ADDRESS_LENGTH + 3]; // +3 for ':' and '\n'
-
-    while (fgets(line, sizeof(line), file) != NULL && num_records < MAX_RECORDS) {
-        // Elimina el salto de línea del final de la línea
-        line[strcspn(line, "\n")] = '\0';
-
-        // Divide la línea en nombre de dominio y dirección IP
-        char *domain = strtok(line, ":");
-        char *ip = strtok(NULL, ":");
-
-        if (domain != NULL && ip != NULL) {
-            // Guarda el registro DNS en la estructura dns_records
-            strncpy(dns_records[num_records].name, domain, MAX_DOMAIN_NAME_LENGTH);
-            strncpy(dns_records[num_records].value, ip, MAX_IP_ADDRESS_LENGTH);
-
-            num_records++;
-        }
-    }
-
-    fclose(file);
-}
-
-void handle_dns_request(int sockfd, const char *query, const struct sockaddr_in *client_addr, socklen_t client_len) {
-    char buffer[MAX_DOMAIN_NAME_LENGTH];
-
-    // Mostrar mensaje cuando se recibe una solicitud DNS
-    printf("Solicitud DNS recibida de %s\n", inet_ntoa(client_addr->sin_addr));
-
-    // Procesar la solicitud DNS y buscar la respuesta en los registros cargados
-    const char *response = NULL;
-    for (int i = 0; i < num_records; ++i) {
-        if (strcmp(query, dns_records[i].name) == 0) {
-            // Se encontró una coincidencia, asignar la respuesta
-            response = dns_records[i].value;
-            break;
-        }
-    }
-
-    // Si no se encontró una respuesta, enviar una respuesta predeterminada
-    if (!response) {
-        response = "No se encontró la dirección IP para el nombre de dominio especificado";
-    }
-
-    // Enviar la respuesta al cliente
-    if (sendto(sockfd, response, strlen(response), 0, (struct sockaddr *)client_addr, client_len) == -1) {
-        perror("Error al enviar respuesta");
-        exit(EXIT_FAILURE);
-    }
-}
+typedef struct {
+    char domain[256];
+    char ip[256];
+} DNSRecord;
 
 int main(int argc, char *argv[]) {
-    if (argc != 5) {
-        fprintf(stderr, "Uso: %s <ip> <port> <config_file> <log_file>\n", argv[0]);
-        exit(EXIT_FAILURE);
+    if (argc != 4) {
+        printf("Uso: %s <ip_servidor> <puerto> <archivo_registros>\n", argv[0]);
+        return 1;
     }
 
-    // Leer el archivo de configuracion
-    load_dns_records(argv[3]);
+    char *ipServidor = argv[1];
+    int puerto = atoi(argv[2]);
+    char *archivoRegistros = argv[3];
 
-    // Crear el socket UDP
-    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sockfd < 0) {
-        perror("Error al crear el socket");
-        exit(EXIT_FAILURE);
+    FILE *recordsFile = fopen(archivoRegistros, "r");
+
+    if (recordsFile == NULL) {
+        printf("Error al abrir el archivo de registros.\n");
+        return 1;
     }
 
-    // Configurar la dirección del servidor
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(argv[1]);
-    server_addr.sin_port = htons(atoi(argv[2]));
-
-    // Vincular el socket a la dirección del servidor
-    if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
-        perror("Error al vincular el socket");
-        close(sockfd);
-        exit(EXIT_FAILURE);
+    // Leer registros DNS desde el archivo
+    DNSRecord dnsRecords[MAX_RECORDS];
+    int numRecords = 0;
+    char line[MAX_BUFFER_SIZE];
+    while (fgets(line, sizeof(line), recordsFile) != NULL && numRecords < MAX_RECORDS) {
+        char *domain = strtok(line, ":");
+        char *ip = strtok(NULL, "\n");
+        if (domain != NULL && ip != NULL) {
+            strcpy(dnsRecords[numRecords].domain, domain);
+            strcpy(dnsRecords[numRecords].ip, ip);
+            numRecords++;
+        }
     }
 
-    // Esperar y manejar las solicitudes DNS entrantes
-    struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
-    char buffer[MAX_DOMAIN_NAME_LENGTH];
+    fclose(recordsFile);
+
+    // Crear socket UDP
+    int serverSocket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (serverSocket < 0) {
+        printf("Error al crear el socket.\n");
+        return 1;
+    }
+
+    // Configurar dirección del servidor
+    struct sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = inet_addr(ipServidor);
+    serverAddr.sin_port = htons(puerto);
+
+    // Enlazar socket al puerto
+    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
+        printf("Error al enlazar el socket al puerto.\n");
+        close(serverSocket);
+        return 1;
+    }
+
+    printf("Servidor DNS iniciado. Esperando consultas...\n");
+
+    struct sockaddr_in clientAddr;
+    socklen_t clientAddrSize = sizeof(clientAddr);
+    char buffer[MAX_BUFFER_SIZE];
 
     while (1) {
-        int recv_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_len);
-        if (recv_len == -1) {
-            perror("Error al recibir datos");
-            exit(EXIT_FAILURE);
+        int bytesReceived = recvfrom(serverSocket, buffer, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&clientAddr, &clientAddrSize);
+        if (bytesReceived < 0) {
+            printf("Error al recibir datos del cliente.\n");
+            break;
         }
-        buffer[recv_len] = '\0';
-        handle_dns_request(sockfd, buffer, &client_addr, client_len);
+
+        buffer[bytesReceived] = '\0';
+
+        char *requestedItem = buffer;
+        char *foundItem = NULL;
+
+        // Buscar IP o nombre de dominio en los registros
+        for (int i = 0; i < numRecords; i++) {
+            if (strcmp(requestedItem, dnsRecords[i].domain) == 0 || strcmp(requestedItem, dnsRecords[i].ip) == 0) {
+                foundItem = (strcmp(requestedItem, dnsRecords[i].domain) == 0) ? dnsRecords[i].ip : dnsRecords[i].domain;
+                // Enviar la respuesta al cliente
+                sendto(serverSocket, foundItem, strlen(foundItem), 0, (struct sockaddr *)&clientAddr, clientAddrSize);
+                printf("Respondiendo a la consulta para %s: %s\n", requestedItem, foundItem);
+                break;
+            }
+        }
+
+        if (foundItem == NULL) {
+            printf("No se encontró un registro para %s\n", requestedItem);
+        }
     }
 
-    // Cerrar el socket
-    close(sockfd);
+    // Cerrar socket
+    close(serverSocket);
 
     return 0;
 }
