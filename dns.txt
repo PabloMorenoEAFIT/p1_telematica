@@ -3,7 +3,6 @@ avianca.com:204.74.99.103
 facebook.com:104.244.42.129
 cualquiercosa.com:142.250.72.206
 amazon.com:3.33.182.45
-DIAN.com:212.58.249.206
 udea.edu.co:200.24.23.33
 uniminuto.edu:https:200.10.154.22
 linkedin.com:108.174.10.10
