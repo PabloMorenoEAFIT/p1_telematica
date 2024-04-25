@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <unistd.h> 
 
 #define MAX_BUFFER_SIZE 1024
 #define MAX_RECORDS 100
