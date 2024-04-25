@@ -6,3 +6,4 @@ amazon.com:3.33.182.45
 udea.edu.co:200.24.23.33
 uniminuto.edu:https:200.10.154.22
 linkedin.com:108.174.10.10
+ejemplo2.com:172.217.164.110
